@@ -1,0 +1,18 @@
+*.swp
+**/__pycache__/**
+.dumbo.json
+.idea/*
+**/.ipynb_checkpoints/**
+output/
+wandb/
+.vscode/
+*.pth
+*.DS_Store
+tokenizer_ckpts/
+*.egg-info
+build/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json

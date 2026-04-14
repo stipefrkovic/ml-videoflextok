@@ -1,0 +1,26 @@
+model:
+  target: videoflextok.vidtok.models.autoencoder.AutoencodingEngine
+  params:
+    encoder_config:
+      target: videoflextok.vidtok.modules.model_3dcausal.EncoderCausal3DPadding
+      params:
+        double_z: true
+        z_channels: 16
+        in_channels: 3
+        out_ch: 3
+        ch: 128
+        ch_mult: [1, 2, 4, 4]
+        time_downsample_factor: 4
+        num_res_blocks: 2
+        dropout: 0.0
+        init_pad_mode: replicate
+        norm_type: layernorm
+        fix_encoder: false
+        fix_decoder: false
+
+    decoder_config:
+      target: videoflextok.vidtok.modules.model_3dcausal.DecoderCausal3DPadding
+      params: ${model.params.encoder_config.params}
+
+    regularizer_config:
+      target: videoflextok.vidtok.modules.regularizers.DiagonalGaussianRegularizer

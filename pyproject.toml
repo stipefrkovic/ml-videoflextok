@@ -1,0 +1,120 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "videoflextok"
+version = "1.0.0"
+description = "VideoFlexTok runtime package"
+requires-python = ">=3.8"
+readme = {file = "README.md", content-type = "text/markdown"}
+dependencies = [
+    "torch==2.8.0",
+    "torchvision==0.23.0",
+    "diffusers==0.20.0",
+    "einops>=0.7.0",
+    "huggingface_hub==0.25.2",
+    "hydra-core>=1.3.2",
+    "matplotlib>=3.6.2",
+    "numpy>=1.26.4",
+    "omegaconf>=2.3.0",
+    "PyYAML>=6.0",
+    "mup",
+    "safetensors>=0.4.0",
+    "tqdm>=4.64.1",
+    "eva-decord==0.6.1",
+    "imageio>=2.37.2",
+    "imageio-ffmpeg==0.6.0",
+]
+
+[project.urls]
+"Homepage" = "https://videoflextok.epfl.ch"
+
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "mypy==1.10.1",
+    "types-pyyaml",
+    "types-tqdm",
+    "types-requests",
+    "types-regex",
+    "black>=24.4.2",
+    "isort>=5.13.2",
+    "pre-commit>=3.7.1",
+]
+
+[tool.setuptools.packages.find]
+include = ["videoflextok*"]
+exclude = ["cfgs*", "assets*", "notebooks*"]
+
+[tool.setuptools.package-data]
+videoflextok = [
+  "vidtok/configs/*.yaml",
+]
+
+[tool.wheel]
+exclude = ["cfgs*", "assets*", "notebooks*"]
+
+[tool.black]
+line-length = 100
+target-version = ["py38"]
+include = '\.pyi?$'
+exclude = '''
+(
+  /(
+      \.eggs         # exclude a few common directories in the
+    | \.git          # root of the project
+    | \.hg
+    | \.mypy_cache
+    | \.tox
+    | \.venv
+    | _build
+    | buck-out
+    | build
+    | dist
+    | messages
+  )/
+)
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 100
+skip = ["messages"]
+sections = ["FUTURE", "STDLIB", "THIRDPARTY", "NUMERIC", "VISION", "DATA", "CONFIG", "MISC", "FIRSTPARTY", "LOCALFOLDER"]
+known_numeric = ["torch", "tensorflow", "numpy", "pandas", "sklearn"]
+known_vision = ["PIL", "torchvision", "timm", "fvcore"]
+known_config = ["yaml", "hydra", "omegaconf"]
+known_data = ["h5py", "wilds", "webdataset", "tensorflow_datasets"]
+known_misc = ["wandb", "tqdm", "fsspec", "boto3", "ftfy", "braceexpand", "regex", "composer", "llmfoundry", "transformers"]
+
+# mypy global options:
+
+[tool.mypy]
+mypy_path = "$MYPY_CONFIG_FILE_DIR/videoflextok"
+python_version = "3.8"
+plugins = "numpy.typing.mypy_plugin"
+exclude = ["build", "bolt", "tools"]
+
+# mypy per-module options:
+
+[[tool.mypy.overrides]]
+module = [
+    "torchvision.*",
+    "diffusers.*",
+    "webdataset.*",
+    "datasets.*",
+    "sklearn.*",
+    "albumentations.*",
+    "transformers.*",
+    "timm.*",
+    "tokenizers.*",
+    "open_clip.*",
+    "xformers.*",
+    "fairscale.*",
+    "mup",
+    "mup.*",
+    "detectron2.*",
+]
+ignore_missing_imports = true
