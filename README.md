@@ -1,6 +1,6 @@
 # VideoFlexTok: Flexible-Length Coarse-to-Fine Video Tokenization
 
-[`Website`](https://videoflextok.epfl.ch) | [`arXiv`](https://arxiv.org/abs/PLACEHOLDER) | [`BibTeX`](#citation)
+[`Website`](https://videoflextok.epfl.ch) | [`arXiv`](https://arxiv.org/abs/2604.12887) | [`BibTeX`](#citation)
 
 Official inference implementation for:
 
