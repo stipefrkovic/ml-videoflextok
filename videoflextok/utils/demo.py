@@ -25,9 +25,10 @@ def read_mp4(
     file: str,
     fps: Optional[int] = None,
     num_frames: Optional[int] = None,
-    chunk_size: int = FRAMES_CHUNK_SIZE, 
+    chunk_size: int = FRAMES_CHUNK_SIZE,
     size: int = SIZE,
-    overlap_size: int = OVERLAP_SIZE_FRAMES
+    overlap_size: int = OVERLAP_SIZE_FRAMES,
+    overlap_size_frames: Optional[int] = None,
 ) -> torch.Tensor:
     """Read and sample frames from an MP4 file.
 
@@ -43,7 +44,10 @@ def read_mp4(
         Tensor of shape (C, T, H, W) with values in [-1, 1] if transform is applied,
         otherwise in [0, 1]
     """
-    assert num_frames is None or fps is None, "Only one of num_frames or fps should be specified, but got both"        
+    assert num_frames is None or fps is None, "Only one of num_frames or fps should be specified, but got both"
+
+    if overlap_size_frames is not None:
+        overlap_size = overlap_size_frames
 
     vr = decord.VideoReader(file, ctx=decord.cpu(0))
     total_frames = len(vr)

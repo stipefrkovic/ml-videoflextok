@@ -7,24 +7,25 @@ model = VideoFlexTokFromHub.from_pretrained('EPFL-VILAB/videoflextok_d18_d28').e
 
 video_tensor = read_mp4(
     "./data/video_examples/porsche.mp4",
-    fps=8,
+    fps=1,
     **model.video_preprocess_args,
 )  # (C, T, H, W)
 print(f"Video tensor shape: {video_tensor.shape}")
+if hasattr(model.video_tokenizer, 'is_causal'):
+    print(f"is_causal: {model.video_tokenizer.is_causal}")
+if hasattr(model.video_tokenizer, 'temporal_downsample_factor'):
+    print(f"temporal_downsample_factor: {model.video_tokenizer.temporal_downsample_factor}")
 
-tokens_list = model.tokenize(video_tensor[None])
+tokens_list = model.tokenize(video_tensor.unsqueeze(0))
 print(f"Tokens: {len(tokens_list)} sequences, first shape: {tokens_list[0].shape}")
 
-torch.save(tokens_list, "tokens.pt")
-print("Saved tokens.pt")
-
-# reconst = model.detokenize(
-#     tokens_list,
-#     timesteps=30,
-#     guidance_scale=20.,
-#     perform_norm_guidance=True,
-# )
-# print(f"Reconstruction shape: {reconst[0].shape}")
+reconst = model.detokenize(
+    tokens_list,
+    timesteps=30,
+    guidance_scale=20.,
+    perform_norm_guidance=True,
+)
+print(f"Reconstruction shape: {reconst[0].shape}")
 
 # # reconst[0]: [1, 3, T, H, W] in [-1, 1] -> (T, H, W, 3) uint8
 # video = reconst[0].squeeze(0)          # (3, T, H, W)
