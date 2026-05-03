@@ -1,8 +1,9 @@
 import time
 import torch
-import torchvision.io
+import imageio.v3 as iio
+import numpy as np
 from videoflextok.wrappers import VideoFlexTokFromHub
-from videoflextok.utils.demo import read_mp4
+from videoflextok.utils.demo import read_mp4, denormalize
 
 model = VideoFlexTokFromHub.from_pretrained('EPFL-VILAB/videoflextok_d18_d28').eval()
 
@@ -41,10 +42,7 @@ reconst = model.detokenize(
 )
 print(f"Detokenize: {time.perf_counter() - t0:.2f}s — reconstruction shape: {reconst[0].shape}")
 
-# # reconst[0]: [1, 3, T, H, W] in [-1, 1] -> (T, H, W, 3) uint8
-# video = reconst[0].squeeze(0)          # (3, T, H, W)
-# video = (video.clamp(-1, 1) + 1) / 2  # [0, 1]
-# video = (video * 255).byte()           # [0, 255]
-# video = video.permute(1, 2, 3, 0)      # (T, H, W, 3)
-# torchvision.io.write_video("output.mp4", video.cpu(), fps=8)
-# print("Saved output.mp4")
+video = denormalize(reconst[0].squeeze(0).cpu().float())  # (C, T, H, W) in [0, 1]
+frames = (video.permute(1, 2, 3, 0).numpy() * 255).round().astype(np.uint8)  # (T, H, W, 3)
+iio.imwrite("output.mp4", frames, fps=8, plugin="FFMPEG", codec="libx264", pixelformat="yuv420p")
+print("Saved output.mp4")
