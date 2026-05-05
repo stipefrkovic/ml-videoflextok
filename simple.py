@@ -8,8 +8,8 @@ from videoflextok.utils.demo import read_mp4, denormalize
 model = VideoFlexTokFromHub.from_pretrained('EPFL-VILAB/videoflextok_d18_d28').eval()
 
 video_tensor = read_mp4(
-    "./data/video_examples/porsche.mp4",
-    fps=1,
+    "./data/video_examples/frames.mp4",
+    num_frames=33,
     **model.video_preprocess_args,
 )  # (C, T, H, W)
 print(f"Video tensor shape: {video_tensor.shape}")
@@ -30,7 +30,7 @@ print(f"stride: {model.stride}")
 print(f"video_preprocess_args: {model.video_preprocess_args}")
 
 t0 = time.perf_counter()
-tokens_list = model.tokenize(video_tensor.unsqueeze(0))
+tokens_list = model.tokenize(video_tensor[None])
 print(f"Tokenize: {time.perf_counter() - t0:.2f}s — {len(tokens_list)} sequences, first shape: {tokens_list[0].shape}")
 
 t0 = time.perf_counter()

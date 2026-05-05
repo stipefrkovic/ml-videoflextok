@@ -58,7 +58,7 @@ class FlexAttention(nn.Module):
         self.scale = 8.0 / self.head_dim if muP_scale else None
 
         # Should always be compiled
-        self.flex_attention = torch.compile(flex_attention, dynamic=False)
+        self.flex_attention = flex_attention
 
     def forward(self, xq, xk, xv, score_mod=None, block_mask=None, rope_forward=None):
         """Forward pass of the FlexAttention module.

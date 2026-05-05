@@ -2,6 +2,7 @@
 # Copyright (C) 2026 Apple Inc. and EPFL. All Rights Reserved.
 import decord
 import math
+import warnings
 from typing import Optional
 
 import numpy as np
@@ -64,9 +65,11 @@ def read_mp4(
         K = max(0, math.ceil((desired_frames - 1) / chunk_stride))
         num_frames = 1 + K * chunk_stride
 
-    assert (num_frames - 1) % (
-        chunk_size - overlap_size
-    ) == 0, f"num_frames should be of the form 1 + k * (chunk_size - overlap_size) for some integer k >= 0, but got {num_frames} with chunk_size={chunk_size} and overlap_size={overlap_size}"
+    if (num_frames - 1) % (chunk_size - overlap_size) != 0:
+        warnings.warn(
+            f"num_frames should be of the form 1 + k * (chunk_size - overlap_size) for some integer k >= 0, "
+            f"but got {num_frames} with chunk_size={chunk_size} and overlap_size={overlap_size}"
+        )
     
     # Sample frames uniformly
     idx = np.linspace(0, total_frames - 1, num_frames, dtype=np.int32)
