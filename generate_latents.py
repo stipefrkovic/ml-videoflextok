@@ -12,10 +12,11 @@ from videoflextok.wrappers import VideoFlexTokFromHub
 from videoflextok.utils.demo import MEAN, STD
 
 
-def read_mp4_first_n(file: str, num_frames: int, size: int = 256, **_unused) -> torch.Tensor:
-    """Read the first `num_frames` frames of an mp4 (no uniform sub-sampling)."""
+def read_mp4_first_n(file: str, num_frames: int, size: int = 256, start: int = 0, **_unused) -> torch.Tensor:
+    """Read frames `[start..start+num_frames)` of an mp4 (no uniform sub-sampling)."""
     vr = decord.VideoReader(file, ctx=decord.cpu(0))
-    idx = np.arange(min(num_frames, len(vr)), dtype=np.int32)
+    end = min(start + num_frames, len(vr))
+    idx = np.arange(start, end, dtype=np.int32)
     frames = vr.get_batch(idx)
     if isinstance(frames, torch.Tensor):
         frames = frames.permute(3, 0, 1, 2).contiguous()
@@ -45,7 +46,9 @@ print(f"Model on {device}")
 stride = model.stride
 k = 1
 NUM_FRAMES = 1 + k * stride
-print(f"stride={stride} -> NUM_FRAMES={NUM_FRAMES}")
+NUM_ACT_EXTRACT_PERVID = 8           # number of no-op/action pairs per video
+WINDOW_STRIDE_FRAMES = 8             # raw-frame step between successive windows (one action cycle)
+print(f"stride={stride} -> NUM_FRAMES={NUM_FRAMES}, pairs/video={NUM_ACT_EXTRACT_PERVID}")
 
 # Frame -> latent mapping (causal magvit-style).
 chunk_size = model.chunk_size
@@ -85,45 +88,65 @@ print(f"Total latent frames: {len(latent_to_frames)}\n")
 mp4_paths = sorted(DATASET_ROOT.rglob("frames.mp4"))
 print(f"Found {len(mp4_paths)} videos under {DATASET_ROOT}")
 
+min_frames = min(len(decord.VideoReader(str(p), ctx=decord.cpu(0))) for p in mp4_paths)
+max_pairs = (min_frames - (NUM_FRAMES - 1)) // WINDOW_STRIDE_FRAMES + 1
+print(f"Shortest video: {min_frames} frames -> max pairs/video = {max_pairs}")
+if NUM_ACT_EXTRACT_PERVID > max_pairs:
+    print(
+        f"WARNING: NUM_ACT_EXTRACT_PERVID={NUM_ACT_EXTRACT_PERVID} exceeds max ({max_pairs}); "
+        f"shorter videos will be skipped."
+    )
+
 for mp4_path in mp4_paths:
     rel = mp4_path.relative_to(DATASET_ROOT).parent  # mirrors session dir
     out_dir = LATENTS_ROOT / rel
     out_path = out_dir / "latents.pt"
 
     t0 = time.perf_counter()
-    # Read NUM_FRAMES - 1 real frames, then prepend a duplicate of frame 0
-    # so latent 0 encodes a clean no-op baseline.
+    # Read all raw frames needed across all sliding windows in one shot.
+    raw_per_window = NUM_FRAMES - 1
+    total_raw = (NUM_ACT_EXTRACT_PERVID - 1) * WINDOW_STRIDE_FRAMES + raw_per_window
     raw = read_mp4_first_n(
         str(mp4_path),
-        num_frames=NUM_FRAMES - 1,
+        num_frames=total_raw,
         **model.video_preprocess_args,
-    )  # (C, T-1, H, W)
-    video_tensor = torch.cat([raw[:, :1], raw], dim=1).to(device)  # (C, T, H, W)
+    )  # (C, total_raw, H, W)
 
     actions_path = mp4_path.parent / "actions.json"
     with open(actions_path) as f:
-        raw_actions = json.load(f)["actions"][:NUM_FRAMES - 1]
-    actions = [raw_actions[0]] + raw_actions  # duplicate first action to match
+        raw_actions = json.load(f)["actions"][:total_raw]
 
-    print(
-        f"[{rel}] read {video_tensor.shape}, {len(actions)} actions in "
-        f"{time.perf_counter() - t0:.2f}s -> saving to {out_path}"
-    )
-    for li, frames in enumerate(latent_to_frames):
-        latent_actions = [actions[fi]["action"] for fi in frames if fi < len(actions)]
-        print(f"  latent {li} (frames {frames}): actions {latent_actions}")
+    if raw.shape[1] < total_raw or len(raw_actions) < total_raw:
+        print(f"  skipping {rel}: only {raw.shape[1]} frames / {len(raw_actions)} actions, need {total_raw}")
+        continue
 
-    with torch.no_grad():
-        tokens_list = model.tokenize(video_tensor[None])
-    print(f"  tokens_list: {len(tokens_list)} seq, shapes {[t.shape for t in tokens_list]}")
-    print(f"  derived latent frames: {len(latent_to_frames)}")
-
-    # Keep only latents 1 (no-op) and 2 (first action) — the no-action/action pair.
-    # Subsequent latents are causally conditioned on these and are dropped.
+    # Process N windows one at a time (batch=1) to keep memory low.
     KEEP = [1, 2]
-    kept_tokens = [t[:, KEEP] for t in tokens_list]  # (B, 2, D)
     kept_frames = [latent_to_frames[i] for i in KEEP]
-    kept_actions = [[actions[fi] for fi in g] for g in kept_frames]
+    per_window_tokens: list[list[torch.Tensor]] = []   # [N][num_seq] of (1, 2, D)
+    per_window_actions: list[list[list]] = []          # (N, 2, 4)
+
+    print(f"[{rel}] {NUM_ACT_EXTRACT_PERVID} windows, read in {time.perf_counter() - t0:.2f}s -> saving to {out_path}")
+
+    for i in range(NUM_ACT_EXTRACT_PERVID):
+        s = i * WINDOW_STRIDE_FRAMES
+        wraw = raw[:, s:s + raw_per_window]                                  # (C, 16, H, W)
+        wvid = torch.cat([wraw[:, :1], wraw], dim=1).to(device)              # (C, 17, H, W)
+        wacts = raw_actions[s:s + raw_per_window]
+        wacts_dup = [wacts[0]] + wacts                                       # 17 actions
+
+        with torch.no_grad():
+            tokens_list = model.tokenize(wvid[None])                         # each (1, 5, D)
+        per_window_tokens.append([t[:, KEEP].cpu() for t in tokens_list])
+        per_window_actions.append([[wacts_dup[fi] for fi in g] for g in kept_frames])
+
+    # Stack across windows: list-per-seq of (N, 2, D)
+    n_seq = len(per_window_tokens[0])
+    kept_tokens = [
+        torch.cat([per_window_tokens[i][s] for i in range(NUM_ACT_EXTRACT_PERVID)], dim=0)
+        for s in range(n_seq)
+    ]
+    kept_actions = per_window_actions
     print(
         f"  saving latents {KEEP}: shapes {[t.shape for t in kept_tokens]}, "
         f"frames {kept_frames}"
@@ -132,11 +155,13 @@ for mp4_path in mp4_paths:
     out_dir.mkdir(parents=True, exist_ok=True)
     torch.save(
         {
-            "tokens": [t.cpu() for t in kept_tokens],
+            "tokens": kept_tokens,  # already on CPU
             "actions": kept_actions,
             "latent_to_frames": kept_frames,
             "kept_latents": KEEP,
             "num_frames": NUM_FRAMES,
+            "window_stride_frames": WINDOW_STRIDE_FRAMES,
+            "n_windows": NUM_ACT_EXTRACT_PERVID,
         },
         out_path,
     )
