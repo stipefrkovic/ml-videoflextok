@@ -13,7 +13,7 @@ We take frames *t* to *t+15* and duplicate the first frame to have 17 frames. We
 - The videos are sampled differently!
 - VideoFlexTok does not have action tokens directly; we currently take a no-action-frame and an action-frame token pair. Maybe the action-frame token alone is enough but we have to see.
 - The losses between the two methods are different. AdaWorld learns latent actions by encoding and decoding frames based on them i.e. with a reconstruction loss directly influenced by actions. VideoFlexTok learns tokens that autoregressively deconstruct a video from the beginning, without the concept of actions.
-
+##
 
 ```mermaid
 flowchart LR
