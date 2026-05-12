@@ -5,6 +5,7 @@ from pathlib import Path
 import decord
 import numpy as np
 import torch
+from tqdm import tqdm
 from torchvision import transforms
 from torchvision.transforms._transforms_video import NormalizeVideo
 
@@ -34,7 +35,7 @@ def read_mp4_first_n(file: str, num_frames: int, size: int = 256, start: int = 0
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 DATASET_ROOT = Path(
-    "/gpfs/home3/scur0531/izzi/genieRedux/data_generation/datasets/random_game_video"
+    "/scratch-shared/scur0531/retro_act_v0.0.0_random_stipe"
 )
 LATENTS_ROOT = Path(
     "/gpfs/home3/scur0531/stipe/random_game_video_latents"
@@ -85,8 +86,12 @@ for ci, cstart in enumerate(chunk_starts):
         latent_to_frames.append(g)
 print(f"Total latent frames: {len(latent_to_frames)}\n")
 
-mp4_paths = sorted(DATASET_ROOT.rglob("frames.mp4"))
-print(f"Found {len(mp4_paths)} videos under {DATASET_ROOT}")
+MAX_GAMES = 4  # limit number of distinct games (e.g. retro_8eyes-nes_v0.0.0); None = all
+game_dirs = sorted(p for p in DATASET_ROOT.glob("*") if p.is_dir())
+if MAX_GAMES is not None:
+    game_dirs = game_dirs[:MAX_GAMES]
+mp4_paths = sorted(p for g in game_dirs for p in g.rglob("frames.mp4"))
+print(f"Found {len(mp4_paths)} videos across {len(game_dirs)} games under {DATASET_ROOT}")
 
 min_frames = min(len(decord.VideoReader(str(p), ctx=decord.cpu(0))) for p in mp4_paths)
 max_pairs = (min_frames - (NUM_FRAMES - 1)) // WINDOW_STRIDE_FRAMES + 1
@@ -97,7 +102,7 @@ if NUM_ACT_EXTRACT_PERVID > max_pairs:
         f"shorter videos will be skipped."
     )
 
-for mp4_path in mp4_paths:
+for mp4_path in tqdm(mp4_paths, desc="videos", unit="vid", mininterval=2.0):
     rel = mp4_path.relative_to(DATASET_ROOT).parent  # mirrors session dir
     out_dir = LATENTS_ROOT / rel
     out_path = out_dir / "latents.pt"
@@ -128,7 +133,7 @@ for mp4_path in mp4_paths:
 
     print(f"[{rel}] {NUM_ACT_EXTRACT_PERVID} windows, read in {time.perf_counter() - t0:.2f}s -> saving to {out_path}")
 
-    for i in range(NUM_ACT_EXTRACT_PERVID):
+    for i in tqdm(range(NUM_ACT_EXTRACT_PERVID), desc=f"{rel} windows", leave=False, mininterval=2.0):
         s = i * WINDOW_STRIDE_FRAMES
         wraw = raw[:, s:s + raw_per_window]                                  # (C, 16, H, W)
         wvid = torch.cat([wraw[:, :1], wraw], dim=1).to(device)              # (C, 17, H, W)

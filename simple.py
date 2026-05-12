@@ -22,6 +22,7 @@ VIDEO_PATH = (
 
 )
 K = 1  # smallest valid clip: NUM_FRAMES = 1 + K * stride
+NUM_KEEP_TOKENS = 32  # tokens kept per latent frame for reconstruction (max 256)
 
 
 def read_mp4_first_n(file: str, num_frames: int, size: int = 256, start: int = 0, **_unused) -> torch.Tensor:
@@ -96,10 +97,15 @@ decoder_generation_kwargs = dict(
 
 t0 = time.perf_counter()
 with get_bf16_context(enable_bf16):
-    reconst = model.detokenize(tokens_list, **decoder_generation_kwargs)
+    reconst = model.detokenize(
+        tokens_list,
+        num_keep_tokens_list=[NUM_KEEP_TOKENS],
+        **decoder_generation_kwargs,
+    )
 print(f"Detokenize: {time.perf_counter() - t0:.2f}s — reconstruction shape: {reconst[0].shape}")
 
 video = denormalize(reconst[0].squeeze(0).cpu().float()).clamp(0, 1)  # (C, T, H, W) in [0, 1]
 frames = (video.permute(1, 2, 3, 0).numpy() * 255).round().astype(np.uint8)  # (T, H, W, 3)
-iio.imwrite("output.mp4", frames, fps=8, plugin="FFMPEG", codec="libx264", pixelformat="yuv420p")
-print("Saved output.mp4")
+out_path = f"output_K{K}_keep{NUM_KEEP_TOKENS}.mp4"
+iio.imwrite(out_path, frames, fps=8, plugin="FFMPEG", codec="libx264", pixelformat="yuv420p")
+print(f"Saved {out_path}")
